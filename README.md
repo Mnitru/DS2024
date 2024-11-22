@@ -11,5 +11,8 @@ USTH ICT 2024 Distributed Systems
 Group Info
 =======================
 
-* Name 1 (ID1)
-* Name 2 (ID2)
+* Name 1 Le Quoc Trung (BA12-177)
+* Name 2 Nguyen Kien Trung (BA12-178)
+* Name 3 Nguyen Dinh Tung (22BI13455)
+* Name 4 Nguyen Huy Tung (22BI13456)
+* Name 5 Nguyen Duc Bao Minh(BI12-278)
