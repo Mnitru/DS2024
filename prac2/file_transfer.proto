@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package filetransfer;
+
+// Service definition
+service FileTransfer {
+  rpc UploadFile (FileRequest) returns (FileResponse);
+  rpc DownloadFile (FileRequest) returns (FileResponse);
+}
+
+// Messages definition
+message FileRequest {
+  string filename = 1;
+  bytes data = 2;
+}
+
+message FileResponse {
+  string message = 1;
+  int32 status = 2; // 0: Success, 1: Failure
+}

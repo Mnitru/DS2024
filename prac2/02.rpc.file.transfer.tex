@@ -1,0 +1,168 @@
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Định nghĩa ngôn ngữ Protobuf cho lstlisting
+\lstdefinelanguage{protobuf}{
+  keywords={syntax, service, rpc, message, returns},
+  keywordstyle=\color{blue}\bfseries,
+  morestring=[b]",
+  stringstyle=\color{red},
+  comment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  commentstyle=\color{green!70!black}\itshape,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  breaklines=true, % Tự động ngắt dòng dài
+  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space}, % Ký hiệu ngắt dòng
+  frame=single, % Thêm khung
+  showspaces=false,
+  showstringspaces=false,
+  tabsize=2
+}
+
+% Cài đặt lstlisting chung
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  captionpos=b
+}
+
+\title{02.RPC.File.Transfer}
+\author{
+    Le Quoc Trung \and 
+    Nguyen Kien Trung \and 
+    Nguyen Dinh Tung \and 
+    Nguyen Huy Tung \and 
+    Nguyen Duc Bao Minh
+}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section*{Introduction}
+This report documents the design and implementation of an RPC-based file transfer system. The system is implemented using gRPC and consists of server and client components.
+
+\section*{RPC Service Design}
+The RPC service is defined in a Protocol Buffers file (`file_transfer.proto`). It contains two main services:
+\begin{itemize}
+    \item \textbf{UploadFile}: Streams file chunks from the client to the server.
+    \item \textbf{DownloadFile}: Streams file chunks from the server to the client.
+\end{itemize}
+
+The service definition in Protocol Buffers:
+\begin{lstlisting}[language=protobuf, caption={Protocol Buffers Definition}]
+syntax = "proto3";
+
+service FileTransferService {
+  rpc UploadFile (stream FileChunk) returns (UploadStatus);
+  rpc DownloadFile (FileRequest) returns (stream FileChunk);
+}
+
+message FileChunk {
+  bytes content = 1;
+  string filename = 2;
+}
+
+message FileRequest {
+  string filename = 1;
+}
+
+message UploadStatus {
+  string message = 1;
+  bool success = 2;
+}
+\end{lstlisting}
+
+\section*{System Architecture}
+The system consists of two main components:
+\begin{itemize}
+    \item \textbf{Server}: Handles file upload and download requests.
+    \item \textbf{Client}: Sends file chunks to the server and receives file chunks during downloads.
+\end{itemize}
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.8\textwidth]{archit.png}  
+\caption{System Architecture}
+\end{figure}
+
+\section*{Implementation}
+The implementation uses gRPC for communication. Below are code snippets demonstrating the core functionality.
+
+\subsection*{Server Implementation}
+The server processes file upload and download requests:
+\begin{lstlisting}[language=python, caption={Server Implementation}, frame=single]
+import grpc
+from concurrent import futures
+import file_transfer_pb2_grpc
+import file_transfer_pb2
+
+class FileTransferService(file_transfer_pb2_grpc.FileTransferServiceServicer):
+    def UploadFile(self, request_iterator, context):
+        for chunk in request_iterator:
+            with open(chunk.filename, "ab") as f:
+                f.write(chunk.content)
+        return file_transfer_pb2.UploadStatus(
+            message="File uploaded successfully", success=True)
+
+    def DownloadFile(self, request, context):
+        try:
+            with open(request.filename, "rb") as f:
+                while True:
+                    chunk = f.read(1024)
+                    if not chunk:
+                        break
+                    yield file_transfer_pb2.FileChunk(
+                        content=chunk, filename=request.filename)
+        except FileNotFoundError:
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            context.set_details(f"File '{request.filename}' not found.")
+
+server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+file_transfer_pb2_grpc.add_FileTransferServiceServicer_to_server(
+    FileTransferService(), server)
+server.add_insecure_port("[::]:50051")
+server.start()
+server.wait_for_termination()
+\end{lstlisting}
+
+\subsection*{Client Implementation}
+The client uploads and downloads files using the defined gRPC services:
+\begin{lstlisting}[language=python, caption={Client Implementation}, frame=single]
+import grpc
+import file_transfer_pb2_grpc
+import file_transfer_pb2
+
+def upload_file(stub, filename):
+    def generate_chunks():
+        with open(filename, "rb") as f:
+            while True:
+                chunk = f.read(1024)
+                if not chunk:
+                    break
+                yield file_transfer_pb2.FileChunk(
+                    content=chunk, filename=filename)
+    response = stub.UploadFile(generate_chunks())
+    print(response.message)
+
+def download_file(stub, filename):
+    response = stub.DownloadFile(file_transfer_pb2.FileRequest(
+        filename=filename))
+    with open(f"downloaded_{filename}", "wb") as f:
+        for chunk in response:
+            f.write(chunk.content)
+
+if __name__ == "__main__":
+    channel = grpc.insecure_channel("localhost:50051")
+    stub = file_transfer_pb2_grpc.FileTransferServiceStub(channel)
+    upload_file(stub, "example.txt")
+    download_file(stub, "example.txt")
+\end{lstlisting}
+
+\section*{Conclusion}
+The gRPC-based file transfer system is robust and efficient, leveraging Protocol Buffers for communication. This modular design can be extended for additional functionalities like file metadata or authentication.
+
+\end{document}
